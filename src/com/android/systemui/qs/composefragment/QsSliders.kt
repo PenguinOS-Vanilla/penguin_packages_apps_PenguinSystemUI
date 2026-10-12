@@ -762,7 +762,8 @@ fun Modifier.sliderGesturesHorizontal(
                 onLongPress()
                 isLongPress = true
             }
-        var lastProgress = 0f
+        // Stays null for a tap that never moves, which must not be finished as a drag to zero.
+        var lastProgress: Float? = null
         drag(down.id) { change ->
             if (change.pressed) {
                 longPressJob.cancel()
@@ -776,7 +777,7 @@ fun Modifier.sliderGesturesHorizontal(
         }
         longPressJob.cancel()
         if (!isLongPress) {
-            onValueChangeFinished(lastProgress)
+            lastProgress?.let(onValueChangeFinished)
         }
     }
 }
@@ -797,7 +798,8 @@ fun Modifier.sliderGestures(
                 onLongPress()
                 isLongPress = true
             }
-        var lastProgress = 0f
+        // Stays null for a tap that never moves, which must not be finished as a drag to zero.
+        var lastProgress: Float? = null
         drag(down.id) { change ->
             if (change.pressed) {
                 longPressJob.cancel()
@@ -812,7 +814,7 @@ fun Modifier.sliderGestures(
         }
         longPressJob.cancel()
         if (!isLongPress) {
-            onValueChangeFinished(lastProgress)
+            lastProgress?.let(onValueChangeFinished)
         }
     }
 }
