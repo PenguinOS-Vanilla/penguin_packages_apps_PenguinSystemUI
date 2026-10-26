@@ -95,10 +95,10 @@ import com.android.systemui.qs.composefragment.cosSeekGlow
 import com.android.systemui.qs.composefragment.cosStatusGlow
 import com.android.systemui.qs.composefragment.rememberCosMediaColor
 import com.android.systemui.qs.shared.style.LiquidGlassSurface
-import com.android.systemui.qs.shared.style.LocalGlassBlurAlpha
 import com.android.systemui.qs.shared.style.glassBackdropRegion
-import com.android.systemui.qs.shared.style.glassRim
+import com.android.systemui.qs.shared.style.liquidGlassCosStyle
 import com.android.systemui.qs.shared.style.liquidGlassEnabled
+import com.android.systemui.qs.shared.style.liquidGlassRim
 import com.android.systemui.res.R
 import kotlin.math.min
 
@@ -166,6 +166,7 @@ private fun MediaCardBody(card: MediaCardViewModel, isSelected: Boolean) {
     val fraction = { LockscreenMediaExpansion.fraction }
     val f = fraction()
     val glass = liquidGlassEnabled()
+    val cosGlass = liquidGlassCosStyle()
     val cos = rememberCosFeature(CosFeature.LockscreenMedia)
     val blurAlpha = remember {
         {
@@ -197,20 +198,19 @@ private fun MediaCardBody(card: MediaCardViewModel, isSelected: Boolean) {
                 modifier = Modifier.matchParentSize(),
             )
         }
-        CompositionLocalProvider(LocalGlassBlurAlpha provides blurAlpha) {
-            Box(
-                Modifier.matchParentSize()
-                    .background(
-                        if (immersive) Color.Transparent
-                        else lerpColor(if (glass) LiquidGlassSurface else CompactGlass, SmokyGlass, f)
-                    )
-                    .then(
-                        if (immersive) Modifier
-                        else Modifier.glassRim(RoundedCornerShape(CardCorner))
-                    )
-                    .cosStatusGlow(card.title to card.subtitle, CardCorner)
-            )
-        }
+        Box(
+            Modifier.matchParentSize()
+                .background(
+                    if (immersive) Color.Transparent
+                    else lerpColor(if (glass) LiquidGlassSurface else CompactGlass, SmokyGlass, f)
+                )
+                // The blur behind the card is WallpaperBlur's; a second region would double it.
+                .then(
+                    if (immersive || !glass || cosGlass) Modifier
+                    else Modifier.liquidGlassRim(RoundedCornerShape(CardCorner))
+                )
+                .cosStatusGlow(card.title to card.subtitle, CardCorner)
+        )
         Column(
             modifier =
                 Modifier.fillMaxWidth()
