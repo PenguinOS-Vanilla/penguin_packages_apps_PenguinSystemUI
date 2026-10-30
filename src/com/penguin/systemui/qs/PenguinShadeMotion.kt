@@ -33,6 +33,7 @@ class PenguinShadeMotion @Inject constructor() : ShadeMotion {
     private var defaultQsStyle = false
     private var cos = false
     private var tabletSwitch = false
+    private var stockMotion = false
 
     @Composable
     override fun key(): Any? {
@@ -40,8 +41,13 @@ class PenguinShadeMotion @Inject constructor() : ShadeMotion {
         defaultQsStyle = style.stockLayout
         cos = rememberCosFeature(CosFeature.Shade)
         tabletSwitch = isTabletPanelSwitch()
+        // The Default and Stock styles draw AOSP's own panels, so they also reveal like AOSP
+        // unless the COS shade is on.
+        stockMotion = defaultQsStyle && !cos
         return listOf(defaultQsStyle, cos, tabletSwitch)
     }
+
+    override fun useStockMotion(): Boolean = stockMotion
 
     override fun TransitionBuilder.shadeToQuickSettings(animateQsTilesAsShared: () -> Boolean) {
         styledShadeToQuickSettingsTransition(
