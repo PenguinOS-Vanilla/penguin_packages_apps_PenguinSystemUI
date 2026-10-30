@@ -144,6 +144,8 @@ sealed class PopupChipModel {
         val isPopupShown: Boolean = false,
         val showPopup: () -> Unit = {},
         val hidePopup: () -> Unit = {},
+        /** Swipes the chip away until it shows something new. */
+        val hide: () -> Unit = {},
         val hoverBehavior: HoverBehavior = HoverBehavior.None,
         val contentDescription: String? = null,
         val popupContent: PopupContentModel = PopupContentModel.None,

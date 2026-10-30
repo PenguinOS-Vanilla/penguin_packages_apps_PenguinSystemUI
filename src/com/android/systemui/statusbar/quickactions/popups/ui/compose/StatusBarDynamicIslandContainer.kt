@@ -28,6 +28,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -258,6 +260,7 @@ fun StatusBarDynamicIslandContainer(
                                 onDragStart = { dragged = 0f },
                                 onDragEnd = {
                                     when {
+                                        chips.size <= 1 && abs(dragged) >= slopPx -> chip.hide()
                                         dragged <= -slopPx -> selectRelative(1)
                                         dragged >= slopPx -> selectRelative(-1)
                                     }
@@ -268,7 +271,8 @@ fun StatusBarDynamicIslandContainer(
                                     if (chips.size > 1) change.consume()
                                 },
                             )
-                        },
+                        }
+                            .swipeUpToHide(chip.chipId, slopPx) { chip.hide() },
                 ) {
                     StatusBarDynamicIslandChip(
                         viewModel = chip,
@@ -344,11 +348,17 @@ fun StatusBarDynamicIslandContainer(
                     onChipBoundsChanged = { bounds -> mainChipBounds = bounds },
                     modifier =
                         Modifier.graphicsLayer { translationX = dragOffset.value }
+                            .swipeUpToHide(chip.chipId, thresholdPx) { chip.hide() }
                             .pointerInput(chips.size, chip.chipId) {
                                 detectHorizontalDragGestures(
                                     onDragEnd = {
                                         val switched =
                                             when {
+                                                chips.size <= 1 &&
+                                                    abs(dragAccumulator) >= thresholdPx -> {
+                                                    chip.hide()
+                                                    true
+                                                }
                                                 dragAccumulator <= -thresholdPx -> {
                                                     selectRelative(1)
                                                     true
@@ -469,3 +479,21 @@ private fun appHandleClearance(
     }
     return left - island.left
 }
+
+/** Hides the island on a swipe up; a pull down is left to the shade. */
+private fun Modifier.swipeUpToHide(key: Any, slopPx: Float, onHide: () -> Unit): Modifier =
+    pointerInput(key) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var change = down
+            while (change.pressed) {
+                change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                val delta = change.position - down.position
+                if (-delta.y >= slopPx && -delta.y > abs(delta.x)) {
+                    change.consume()
+                    onHide()
+                    break
+                }
+            }
+        }
+    }

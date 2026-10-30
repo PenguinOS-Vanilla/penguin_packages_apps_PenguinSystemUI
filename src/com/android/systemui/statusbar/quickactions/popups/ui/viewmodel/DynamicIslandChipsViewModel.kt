@@ -24,6 +24,7 @@ import android.os.UserHandle
 import android.provider.Settings
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -40,6 +41,7 @@ import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFe
 import com.android.systemui.statusbar.quickactions.popups.shared.DynamicIslandFeatureSettings.readDynamicIslandFeatureEnabled
 import com.android.systemui.statusbar.quickactions.popups.ui.model.PopupChipId
 import com.android.systemui.statusbar.quickactions.popups.ui.model.PopupChipModel
+import com.android.systemui.statusbar.quickactions.popups.ui.model.PopupContentModel
 import com.android.systemui.statusbar.quickactions.screenrecord.ui.viewmodel.ScreenRecordPopupChipViewModel
 import com.android.systemui.statusbar.quickactions.stopwatch.ui.viewmodel.StopwatchPopupChipViewModel
 import com.android.systemui.shared.system.ActivityManagerWrapper
@@ -158,6 +160,37 @@ constructor(
         currentShownPopupChipId = id
         systemEventChips.chips.firstOrNull { it.chipId == id }?.onPopupShown?.invoke()
     }
+
+    /** Chips swiped away, with what they showed then; they return once that changes. */
+    private val hiddenChips = mutableStateMapOf<PopupChipId, Any?>()
+
+    /** What a hidden chip has to change to come back: a new event, or a new song. */
+    private fun PopupChipModel.Shown.hideKey(): Any? =
+        autoPopupRequest
+            ?: (popupContent as? PopupContentModel.Media)?.model?.let {
+                listOf(it.packageName, it.songName?.toString(), it.artistName?.toString())
+            }
+
+    private fun presentChips(): List<PopupChipModel.Shown> {
+        val bundle = incomingPopupChipBundle
+        return systemEventChips.chips +
+            listOfNotNull(
+                    bundle.media,
+                    bundle.screenRecord,
+                    bundle.liveScore,
+                    bundle.stopwatch,
+                    bundle.alarm,
+                    bundle.flashlight,
+                )
+                .filterIsInstance<PopupChipModel.Shown>()
+    }
+
+    private fun hideChip(id: PopupChipId) {
+        val chip = presentChips().firstOrNull { it.chipId == id } ?: return
+        if (currentShownPopupChipId == id) showPopup(null)
+        hiddenChips[id] = chip.hideKey()
+    }
+
     /** The ID of the current chip that is showing its popup, or `null` if no chip is shown. */
     private var currentShownPopupChipId by mutableStateOf<PopupChipId?>(null)
 
@@ -208,6 +241,9 @@ constructor(
         val openApp = if (isOnLockscreen) null else foregroundPackage
         (systemEventChips.chips + candidateChips.filterIsInstance<PopupChipModel.Shown>())
             .filter { it.ownerPackage == null || it.ownerPackage != openApp }
+            .filterNot { chip ->
+                chip.chipId in hiddenChips && hiddenChips[chip.chipId] == chip.hideKey()
+            }
             .map { chip ->
             chip.copy(
                 isPopupShown = chip.chipId == currentShownPopupChipId,
@@ -215,6 +251,7 @@ constructor(
                 hidePopup = {
                     if (currentShownPopupChipId == chip.chipId) showPopup(null)
                 },
+                hide = { hideChip(chip.chipId) },
             )
         }
     }
@@ -309,6 +346,17 @@ constructor(
                         }
                     }
                 }
+            }
+            launch {
+                // A swiped-away chip comes back once it ends or shows something new.
+                snapshotFlow { presentChips().associate { it.chipId to it.hideKey() } }
+                    .collect { present ->
+                        hiddenChips.keys.toList().forEach { id ->
+                            if (id !in present || present[id] != hiddenChips[id]) {
+                                hiddenChips.remove(id)
+                            }
+                        }
+                    }
             }
             launch { systemEventChips.activate() }
             launch { mediaControlChip.activate() }
