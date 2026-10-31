@@ -131,6 +131,7 @@ import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.panels.ui.compose.TileGrid
 import com.android.systemui.qs.shared.style.LocalQsPanelStyle
 import com.android.systemui.qs.shared.style.QsPanelStyle
+import com.android.systemui.qs.shared.style.LiquidGlassBrightness
 import com.android.systemui.qs.shared.style.LiquidGlassSurface
 import com.android.systemui.qs.shared.style.glassRim
 import com.android.systemui.qs.shared.style.liquidGlassOn
@@ -1001,6 +1002,7 @@ private fun ContentScope.DefaultQuickSettingsContent(
                     Element(modifier = Modifier, key = Elements.BrightnessSlider) {
                         BrightnessSliderContainer(
                             viewModel.brightnessSliderViewModel,
+                            glassAccent = if (liquidGlassOn) LiquidGlassBrightness else null,
                             containerColors =
                                 ContainerColors(
                                     Color.Transparent,
