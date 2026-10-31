@@ -31,6 +31,7 @@ import com.android.systemui.qs.shared.style.PenguinQsStyle
 import com.android.systemui.qs.shared.style.QsPanelStyle
 import com.android.systemui.qs.shared.style.QsPanelStyleRepository
 import com.android.systemui.qs.shared.style.panelStyle
+import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.ui.composable.ControlCentreTop
 import com.android.systemui.qs.ui.composable.LocalPenguinQsArrival
 import com.android.systemui.qs.ui.composable.LocalQsHostTransition
@@ -72,10 +73,12 @@ constructor(
         val mirror = viewModel.brightnessSliderViewModel
         HideGlassWhileMirroring({ mirror.showMirror }) {
             FadeGlassWithShade {
-                val qsExpansion = shadeInteractor.qsExpansion.collectAsState()
-                val arrival = remember { { qsExpansion.value } }
-                CompositionLocalProvider(LocalPenguinQsArrival provides arrival) {
-                    StyledQuickSettingsContent(viewModel, mediaInRow, modifier, mediaSquishiness)
+                FadeGlassWithContent {
+                    val qsExpansion = shadeInteractor.qsExpansion.collectAsState()
+                    val arrival = remember { { qsExpansion.value } }
+                    CompositionLocalProvider(LocalPenguinQsArrival provides arrival) {
+                        StyledQuickSettingsContent(viewModel, mediaInRow, modifier, mediaSquishiness)
+                    }
                 }
             }
         }
@@ -184,6 +187,16 @@ constructor(
         val launching = shadeAnimationInteractor.isLaunchingActivity.collectAsState()
         val fade = remember(outer) {
             { if (launching.value) 0f else outer() * ((expansion.value - 0.5f) * 2f).coerceIn(0f, 1f) }
+        }
+        CompositionLocalProvider(LocalGlassBlurAlpha provides fade) { content() }
+    }
+
+    // The tile glass is a window blur region, so it has to fade with the content itself
+    @Composable
+    private fun ContentScope.FadeGlassWithContent(content: @Composable () -> Unit) {
+        val outer = LocalGlassBlurAlpha.current
+        val fade = remember(outer) {
+            { outer() * (QuickSettings.Elements.QuickSettingsContent.currentAlpha() ?: 1f) }
         }
         CompositionLocalProvider(LocalGlassBlurAlpha provides fade) { content() }
     }
