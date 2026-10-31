@@ -21,9 +21,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,6 +75,8 @@ private val CoverGap = 10.dp
 private val CoverMin = 96.dp
 
 private const val TallArtAspect = 3f / 4f
+private const val TallArtFadeStart = 0.82f
+private const val TallArtScreenFraction = 0.78f
 
 @Composable
 fun LockscreenExpandedMediaArt(
@@ -182,24 +184,24 @@ fun LockscreenExpandedMediaArt(
         }
 
         Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = f }) {
-            if (tallArt == null) {
-                Artwork(artwork, Modifier.fillMaxSize().blur(60.dp))
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
-            } else {
-                Box(Modifier.fillMaxSize().background(Color.Black))
-            }
+            // Like iOS, the tall video fades into a blur of the cover rather than into black.
+            Artwork(artwork, Modifier.fillMaxSize().blur(60.dp))
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
             tallArt?.let {
+                // Like iOS, the video covers most of the screen (cropping its sides if needed) and
+                // only fades out near its lower edge, behind the player.
+                val videoHeight = maxOf(width / TallArtAspect, height * TallArtScreenFraction)
                 MotionArtVideo(
                     it,
                     Modifier.align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .aspectRatio(TallArtAspect)
+                        .height(with(density) { videoHeight.toDp() })
                         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                         .drawWithContent {
                             drawContent()
                             drawRect(
                                 Brush.verticalGradient(
-                                    0.6f to Color.Black,
+                                    TallArtFadeStart to Color.Black,
                                     1f to Color.Transparent,
                                 ),
                                 blendMode = BlendMode.DstIn,
@@ -227,13 +229,15 @@ fun LockscreenExpandedMediaArt(
             } else {
                 state.artSlotBounds.translate(-origin + rise)
             }
-        val side = minOf(slot.width, slot.height - gap).coerceAtLeast(0f)
+        // Like iOS, centre the cover between the clock and the player.
+        val side = minOf(slot.width, slot.height - 2f * gap).coerceAtLeast(0f)
+        val top = slot.top + (slot.height - side) / 2f
         val to =
             Rect(
                 left = slot.left + (slot.width - side) / 2f,
-                top = slot.bottom - gap - side,
+                top = top,
                 right = slot.left + (slot.width + side) / 2f,
-                bottom = slot.bottom - gap,
+                bottom = top + side,
             )
         val from = state.thumbnailBounds.translate(-origin + rise)
         if (slot.isEmpty || from.isEmpty) return@Box

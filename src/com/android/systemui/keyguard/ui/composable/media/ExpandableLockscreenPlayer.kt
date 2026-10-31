@@ -19,19 +19,28 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.penguin.LockscreenPlayer
+import com.android.systemui.res.R
 import javax.inject.Inject
+
+private val PillMargin = 16.dp
 
 class ExpandableLockscreenPlayer @Inject constructor() : LockscreenPlayer {
 
@@ -96,7 +105,17 @@ class ExpandableLockscreenPlayer @Inject constructor() : LockscreenPlayer {
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                 label = "ExpandedMediaNotifications",
             )
-        val artWeight = expansion * (1f - 0.22f * notifications)
+        // Like iOS, the expanded player sits at the bottom with the notifications collapsed into
+        // the minimized pill below it: their share of the weighted height is just the pill slot.
+        var artHeight by remember { mutableFloatStateOf(0f) }
+        var notificationsHeight by remember { mutableFloatStateOf(0f) }
+        val pillSlot =
+            with(LocalDensity.current) {
+                (dimensionResource(R.dimen.notification_shelf_height) + PillMargin).toPx()
+            }
+        val weighted = notificationsHeight + if (expansion > 0f) artHeight else 0f
+        val pillShare = if (weighted > 0f) (pillSlot / weighted).coerceIn(0f, 0.5f) else 0.22f
+        val artWeight = expansion * (1f - pillShare * notifications)
         val collapseOnTap =
             Modifier.pointerInput(Unit) { detectTapGestures { LockscreenMediaExpansion.collapse() } }
         Box(Modifier.collapsible { 1f - LockscreenMediaExpansion.fraction.within(0f, 0.6f) }) {
@@ -113,6 +132,7 @@ class ExpandableLockscreenPlayer @Inject constructor() : LockscreenPlayer {
             Spacer(
                 Modifier.weight(artWeight)
                     .fillMaxWidth()
+                    .onSizeChanged { artHeight = it.height.toFloat() }
                     .onGloballyPositioned {
                         LockscreenMediaExpansion.artSlotBounds =
                             Rect(it.positionInWindow(), it.size.toSize())
@@ -121,6 +141,10 @@ class ExpandableLockscreenPlayer @Inject constructor() : LockscreenPlayer {
             )
         }
         media()
-        notifications(Modifier.weight(maxOf(1f - artWeight, 0.001f)))
+        notifications(
+            Modifier.weight(maxOf(1f - artWeight, 0.001f)).onSizeChanged {
+                notificationsHeight = it.height.toFloat()
+            }
+        )
     }
 }
