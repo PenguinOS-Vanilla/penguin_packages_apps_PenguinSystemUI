@@ -36,7 +36,7 @@ import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
+import com.android.compose.modifiers.onUnplaced
 import com.android.systemui.clocks.ClockStyle
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -83,7 +84,9 @@ constructor(
     private var defaultFace by mutableStateOf(true)
     private var customStyle by mutableStateOf(0)
     private var handedOff by mutableStateOf(false)
-    private val regions = mutableStateMapOf<Boolean, ComposeRect>()
+    // Each nested scene owns its placeholder. Old/new scenes can coexist during a switch.
+    private data class ClockRegion(val large: Boolean, val bounds: ComposeRect)
+    private val regions = mutableStateMapOf<Any, ClockRegion>()
     private var screenOffset = Offset.Zero
     private var lastDigits: Rect? = null
     private var lastHeight = 0
@@ -128,11 +131,15 @@ constructor(
     @Composable
     override fun Placeholder(large: Boolean, modifier: Modifier) {
         val density = LocalDensity.current
-        DisposableEffect(large) { onDispose { regions.remove(large) } }
+        val owner = remember(large) { Any() }
+        DisposableEffect(owner) { onDispose { regions.remove(owner) } }
         val sized =
             if (large) modifier
             else modifier.fillMaxWidth().height(with(density) { smallHeight(this).toDp() })
-        Box(sized.onGloballyPositioned { regions[large] = it.boundsInWindow() })
+        Box(
+            sized.onPlaced { regions[owner] = ClockRegion(large, it.boundsInWindow()) }
+                .onUnplaced { regions.remove(owner) }
+        )
     }
 
     @Composable
@@ -168,8 +175,11 @@ constructor(
             }
         }
         Canvas(Modifier.fillMaxSize()) {
-            val large = regions.containsKey(true)
-            val region = regions[true] ?: regions[false] ?: return@Canvas
+            val selected =
+                regions.values.lastOrNull { it.large && !it.bounds.isEmpty } ?:
+                    regions.values.lastOrNull { !it.bounds.isEmpty } ?: return@Canvas
+            val large = selected.large
+            val region = selected.bounds
             if (handedOff) return@Canvas
             val location = IntArray(2).also { view.getLocationOnScreen(it) }
             screenOffset = Offset(location[0].toFloat(), location[1].toFloat())
@@ -220,6 +230,12 @@ constructor(
 
     override fun onHandedOff() {
         handedOff = true
+    }
+
+    override fun onHandoffFinished() {
+        // The overlay can stay composed across unlock -> sleep -> AOD. Its draw suppression
+        // must end with the handoff, rather than waiting for DisposableEffect to run again.
+        handedOff = false
     }
 
     private fun smallHeight(density: Density): Float =
